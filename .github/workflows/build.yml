@@ -1,0 +1,57 @@
+name: build-shelter
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Shelter source
+        uses: actions/checkout@v4
+        with:
+          repository: PeterCxy/Shelter
+          ref: master
+          fetch-depth: 0
+          path: shelter
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install SDK components
+        run: sdkmanager "platform-tools" "platforms;android-35" "platforms;android-34" "build-tools;35.0.0"
+
+      - name: Fetch setup-wizard library (submodule mirror)
+        run: |
+          cd shelter
+          rm -rf libs/SetupWizardLibrary
+          mkdir -p libs
+          git clone --depth 1 -b main https://github.com/PeterCxy/SetupWizardLibrary.git libs/SetupWizardLibrary
+
+      - name: Patch version fields
+        run: |
+          cd shelter
+          sed -i 's/versionCode getVersionCode()/versionCode 16/' app/build.gradle
+          sed -i 's/versionName getVersionName()/versionName "1.6"/' app/build.gradle
+          grep -n "versionCode\|versionName" app/build.gradle | head
+
+      - name: Build debug APK
+        run: |
+          cd shelter
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: shelter-apk
+          path: shelter/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
